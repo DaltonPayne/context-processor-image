@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10-slim
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
 
 # Set the working directory in the container
 WORKDIR /app
@@ -8,26 +8,19 @@ WORKDIR /app
 COPY . /app
 
 # Install any needed packages specified in requirements.txt
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && apt-get purge -y --auto-remove build-essential \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the model and tokenizer
-RUN python -c "from transformers import AutoModel, AutoTokenizer; \
-    AutoModel.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True).save_pretrained('/app/model'); \
-    AutoTokenizer.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True).save_pretrained('/app/tokenizer');"
+# Install additional required packages
+RUN pip install --no-cache-dir transformers pillow accelerate
 
-# Modify handler.py to load the model from the pre-downloaded path
-RUN sed -i "s|AutoModel.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5'|AutoModel.from_pretrained('/app/model'|g" handler.py && \
-    sed -i "s|AutoTokenizer.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5'|AutoTokenizer.from_pretrained('/app/tokenizer'|g" handler.py
+# Download and cache the model and tokenizer
+RUN python -c "from transformers import AutoModel, AutoTokenizer; AutoModel.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True); AutoTokenizer.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True)"
 
-# Remove any unnecessary files (adjust as needed)
-RUN find /app -type f -name '*.pyc' -delete && \
-    find /app -type d -name '__pycache__' -delete
+# Make port 8080 available to the world outside this container
+EXPOSE 8080
+
+# Define environment variable
+ENV NAME World
 
 # Run handler.py when the container launches
 CMD ["python", "handler.py"]
