@@ -1,30 +1,15 @@
-# Use an official PyTorch image with CUDA support
-FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim
 
-# Set working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Copy the current directory contents into the container at /app
+COPY . /app
 
-# Copy requirements file
-COPY requirements.txt .
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the handler code and model download script
-COPY handler.py .
-COPY download_model.py .
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-
-# Download and cache the model during the build process
-RUN python download_model.py
-
-# Run the handler
+# Run handler.py when the container launches
 CMD ["python", "handler.py"]
