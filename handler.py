@@ -30,10 +30,7 @@ def resize_and_encode_image(image_data, max_size=(1344, 1344)):
         # Convert image to RGB mode
         image = image.convert('RGB')
         
-        # Encode image to base64
-        buffered = BytesIO()
-        image.save(buffered, format="JPEG")
-        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+        return image
     except Exception as e:
         logger.error(f"Error in resize_and_encode_image: {str(e)}")
         raise
@@ -43,15 +40,12 @@ def load_model():
     try:
         if model is None or tokenizer is None:
             logger.info("Loading model and tokenizer...")
-            model = AutoModel.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True, torch_dtype=torch.float16)
+            model = AutoModel.from_pretrained('/app/model', trust_remote_code=True, torch_dtype=torch.float16)
             model = model.to(device='cuda' if torch.cuda.is_available() else 'cpu')
-            tokenizer = AutoTokenizer.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5', trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained('/app/tokenizer', trust_remote_code=True)
             model.eval()
             logger.info("Model and tokenizer loaded successfully.")
         return model, tokenizer
-    except ImportError as e:
-        logger.error(f"Required package missing: {str(e)}")
-        raise
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
         raise
@@ -73,18 +67,12 @@ def handler(event):
         if not image_data:
             raise ValueError("No image data provided.")
 
-        # Resize and re-encode the image
+        # Resize and process the image
         try:
-            resized_image_data = resize_and_encode_image(image_data)
-        except Exception as e:
-            raise ValueError(f"Error resizing image: {str(e)}")
-
-        # Decode and open the resized image
-        try:
-            image = Image.open(BytesIO(base64.b64decode(resized_image_data))).convert('RGB')
+            image = resize_and_encode_image(image_data)
             logger.info(f"Processed image size: {image.size}")
         except Exception as e:
-            raise ValueError(f"Invalid image data after resizing: {str(e)}")
+            raise ValueError(f"Error processing image: {str(e)}")
 
         # Prepare the messages
         msgs = [{'role': 'user', 'content': question}]
@@ -119,9 +107,6 @@ def handler(event):
     except torch.cuda.OutOfMemoryError:
         logger.error("CUDA out of memory error")
         return {"error": "GPU out of memory. Please try again later or with a smaller image."}
-    except ImportError as ie:
-        logger.error(f"Import error: {str(ie)}")
-        return {"error": "Required package is missing. Please install the necessary dependencies."}
     except Exception as e:
         logger.error(f"Unexpected error in handler: {str(e)}")
         logger.error(traceback.format_exc())
