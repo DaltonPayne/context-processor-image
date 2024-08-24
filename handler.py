@@ -15,6 +15,30 @@ logger = logging.getLogger(__name__)
 model = None
 tokenizer = None
 
+def resize_and_encode_image(image_data, max_size=(1344, 1344)):
+    try:
+        # Decode base64 image
+        image = Image.open(BytesIO(base64.b64decode(image_data)))
+        
+        # Log original image size
+        logger.info(f"Original image size: {image.size}")
+        
+        # Resize image if it's larger than max_size
+        if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
+            image.thumbnail(max_size, Image.LANCZOS)
+            logger.info(f"Image resized to: {image.size}")
+        
+        # Convert image to RGB mode
+        image = image.convert('RGB')
+        
+        # Encode image to base64
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG")
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Error in resize_and_encode_image: {str(e)}")
+        raise
+
 def load_model():
     global model, tokenizer
     try:
@@ -35,11 +59,10 @@ def load_model():
 
 def handler(event):
     global model, tokenizer
-    
     try:
         # Load the model if it's not already loaded
         model, tokenizer = load_model()
-        
+
         # Extract input from the event
         input_data = event.get('input', {})
         image_data = input_data.get('image')
@@ -47,19 +70,26 @@ def handler(event):
         sampling = input_data.get('sampling', True)
         temperature = input_data.get('temperature', 0.7)
         stream = input_data.get('stream', False)
-        
+
         if not image_data:
             raise ValueError("No image data provided.")
-        
-        # Decode and open the image
+
+        # Resize and re-encode the image
         try:
-            image = Image.open(BytesIO(base64.b64decode(image_data))).convert('RGB')
+            resized_image_data = resize_and_encode_image(image_data)
         except Exception as e:
-            raise ValueError(f"Invalid image data: {str(e)}")
-        
+            raise ValueError(f"Error resizing image: {str(e)}")
+
+        # Decode and open the resized image
+        try:
+            image = Image.open(BytesIO(base64.b64decode(resized_image_data))).convert('RGB')
+            logger.info(f"Processed image size: {image.size}")
+        except Exception as e:
+            raise ValueError(f"Invalid image data after resizing: {str(e)}")
+
         # Prepare the messages
         msgs = [{'role': 'user', 'content': question}]
-        
+
         # Generate the response
         if stream:
             res = model.chat(
@@ -83,7 +113,7 @@ def handler(event):
                 temperature=temperature
             )
             return {"generated_text": res}
-    
+
     except ValueError as ve:
         logger.error(f"Value error in handler: {str(ve)}")
         return {"error": str(ve)}
