@@ -5,7 +5,6 @@ import base64
 from io import BytesIO
 import logging
 import traceback
-import os
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -127,14 +126,3 @@ def handler(event):
         logger.error(f"Unexpected error in handler: {str(e)}")
         logger.error(traceback.format_exc())
         return {"error": "An unexpected error occurred. Please try again later."}
-
-if __name__ == "__main__":
-    # This block is for testing the handler locally
-    test_event = {
-        "input": {
-            "image": "base64_encoded_image_data_here",
-            "question": "What is in this image?"
-        }
-    }
-    result = handler(test_event)
-    print(result)
