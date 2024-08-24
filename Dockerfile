@@ -1,13 +1,13 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10-slim AS builder
+FROM python:3.10-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy only the requirements file first to leverage Docker cache
-COPY requirements.txt .
+# Copy the current directory contents into the container at /app
+COPY . /app
 
-# Install build dependencies and Python packages
+# Install any needed packages specified in requirements.txt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && pip install --no-cache-dir --upgrade pip \
@@ -15,9 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Copy the rest of the application
-COPY . .
 
 # Pre-download the model and tokenizer
 RUN python -c "from transformers import AutoModel, AutoTokenizer; \
@@ -28,15 +25,9 @@ RUN python -c "from transformers import AutoModel, AutoTokenizer; \
 RUN sed -i "s|AutoModel.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5'|AutoModel.from_pretrained('/app/model'|g" handler.py && \
     sed -i "s|AutoTokenizer.from_pretrained('openbmb/MiniCPM-Llama3-V-2_5'|AutoTokenizer.from_pretrained('/app/tokenizer'|g" handler.py
 
-# Start a new stage with a clean image
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Copy only necessary files from the builder stage
-COPY --from=builder /app /app
-COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Remove any unnecessary files (adjust as needed)
+RUN find /app -type f -name '*.pyc' -delete && \
+    find /app -type d -name '__pycache__' -delete
 
 # Run handler.py when the container launches
 CMD ["python", "handler.py"]
