@@ -86,6 +86,19 @@ def log_memory_usage():
         logger.info(f"GPU memory cached: {torch.cuda.memory_reserved(0) / 1024**2:.2f} MB")
     logger.info(f"CPU memory usage: {psutil.virtual_memory().percent}%")
 
+def process_messages(messages):
+    logger.info("Processing messages")
+    processed_msgs = []
+    for msg in messages:
+        if isinstance(msg, dict) and 'role' in msg and 'content' in msg:
+            processed_msgs.append(msg)
+        elif isinstance(msg, str):
+            processed_msgs.append({'role': 'user', 'content': msg})
+        else:
+            logger.warning(f"Skipping invalid message format: {msg}")
+    logger.info(f"Processed {len(processed_msgs)} messages")
+    return processed_msgs
+
 def handler(event):
     global model, tokenizer
     try:
@@ -98,26 +111,26 @@ def handler(event):
         # Extract input from the event
         input_data = event.get('input', {})
         image_data = input_data.get('image')
-        question = input_data.get('question', 'What is in the image?')
+        messages = input_data.get('messages', [])
         sampling = input_data.get('sampling', True)
         temperature = input_data.get('temperature', 0.7)
         stream = input_data.get('stream', False)
         
-        logger.info(f"Input parameters - Question: {question}, Sampling: {sampling}, Temperature: {temperature}, Stream: {stream}")
+        logger.info(f"Input parameters - Messages count: {len(messages)}, Sampling: {sampling}, Temperature: {temperature}, Stream: {stream}")
         
-        if not image_data:
-            raise ValueError("No image data provided.")
+        # Process messages
+        processed_msgs = process_messages(messages)
         
-        # Resize and process the image
-        try:
-            image = resize_and_encode_image(image_data)
-            logger.info(f"Processed image size: {image.size}")
-        except Exception as e:
-            raise ValueError(f"Error processing image: {str(e)}")
-        
-        # Prepare the messages
-        msgs = [{'role': 'user', 'content': question}]
-        logger.info("Messages prepared for model input")
+        # Process image if provided
+        if image_data:
+            try:
+                image = resize_and_encode_image(image_data)
+                logger.info(f"Processed image size: {image.size}")
+            except Exception as e:
+                raise ValueError(f"Error processing image: {str(e)}")
+        else:
+            logger.info("No image data provided, proceeding with text-only input")
+            image = None
         
         # Generate the response
         logger.info("Starting model inference")
@@ -127,7 +140,7 @@ def handler(event):
             logger.info("Using streaming mode for response generation")
             res = model.chat(
                 image=image,
-                msgs=msgs,
+                msgs=processed_msgs,
                 tokenizer=tokenizer,
                 sampling=sampling,
                 temperature=temperature,
@@ -141,7 +154,7 @@ def handler(event):
             logger.info("Using non-streaming mode for response generation")
             res = model.chat(
                 image=image,
-                msgs=msgs,
+                msgs=processed_msgs,
                 tokenizer=tokenizer,
                 sampling=sampling,
                 temperature=temperature
